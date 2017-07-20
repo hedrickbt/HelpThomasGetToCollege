@@ -1,0 +1,20 @@
+<html>
+<body>
+<img id="id1" src="1newsoldier.png">
+<script>
+  function placeLabel (text, x, y) { 
+    var iDiv = document.createElement('div');
+    iDiv.id  = 'div1';
+    document.body.appendChild(iDiv);
+    var newLabel = document.createElement("Label");
+    newLabel.innerHTML = text;
+    var div1 = document.getElementById('div1'); 
+    div1.appendChild(newLabel);
+    newLabel.style.position= "absolute" 
+    newLabel.style.top     = y; 
+    newLabel.style.left    = x;   
+  }  
+  placeLabel ( "Who is there?", 150, 20);
+</script>
+</body>
+</html>

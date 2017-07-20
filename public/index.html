@@ -1,0 +1,289 @@
+<html>
+<head>
+<!meta charset="utf-8" />'
+<!meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Help Thomas get to college</title>
+<!script src="https://cdn.socket.io/socket.io-1.4.5.js"><!/script>
+<script src="socket.io-1.4.5.js"></script>
+<script src="simpleGame.js"></script>
+<script src="board.js"></script>
+<script>
+
+   var socket = io();
+   var game;
+   var players = [];
+   var myPlayer;
+   var college;
+   var accel;
+   var myName = "Your Name";
+   var count = 0;
+   var walls = [];
+   var stairs;
+   var chest;
+   var collision = false;
+   var newDX = -1;
+   var newDY = 0;
+   var floors = [];
+   
+   var socketId;
+   var numPlayers = 0;
+   var ballId;
+   var lastAngle=0;
+   var MAPRIGHT = 10000;
+   var MAPBOTTOM = 50000;
+   var SPEED = 15;
+   var myLevel = 0;
+    
+   socket.on ('die', function () { 
+      //alert ( 'I just died bohoo' );
+	     //location.reload();
+   });
+   
+   socket.on ('socketId', function (data) {
+	     socketId = data;
+   });
+   
+   socket.on ('newPositions',function(data) {
+	    count = 0;
+	    for (i=0; i<data.length; i++) {
+	       count = count + 1;
+	       if (count > numPlayers) { 
+	          which = players.length;
+           players[which] = new Sprite (game, '1newsoldier.png', 60, 60);
+           players[which].bullet = new Bullet (players[which]);           
+           
+           players[which].label = document.createElement("Label");
+           players[which].label.style.position = "absolute";
+           document.body.appendChild (players[which].label );
+           
+           players[which].msg = document.createElement("Label");
+           players[which].msg.style.position = "absolute";
+           document.body.appendChild (players[which].msg );           
+           
+		         numPlayers++;
+        }		 
+        players[i].x                 = data[i].x;
+	       players[i].y                 = data[i].y;	   
+	       players[i].id                = data[i].id;
+	       players[i].angle             = data[i].angle;
+	       players[i].bulletx           = data[i].bulletx;
+	       players[i].bullety           = data[i].bullety;
+        players[i].died              = data[i].died;
+        players[i].level             = data[i].level;
+        players[i].name              = data[i].name;   
+        players[i].message           = data[i].message;
+        if (players[i].died) {
+           players[i].label.innerHTML = "";
+        } else {
+           players[i].label.style.left = (data[i].x + (-3 * data[i].name.length) ) + "px";
+           players[i].label.style.top  = (data[i].y -15) + "px"; 
+           players[i].label.innerHTML  = "<Font Color='white'>" + players[i].name + "</Font>";       
+        } 
+
+        if (players[i].died) {
+           players[i].msg.innerHTML = "";
+        } else {
+           players[i].msg.style.left = (data[i].x + (-3 * data[i].message.length) ) + "px";
+           players[i].msg.style.top  = (data[i].y + 60) + "px"; 
+           players[i].msg.innerHTML  = "<Font Color='Blue'>" + players[i].message + "</Font>";       
+        } 
+        
+        if (players[i].bulletStopped != undefined) { 
+          var lastValue = players[i].bulletStopped;
+          if (lastValue != data[i].bulletStopped) { 
+            if (data[i].bulletStopped) { 
+              players[i].bullet.visible = false;              
+            }
+          }
+        }  
+     
+        players[i].bulletStopped = data[i].bulletStopped;
+	       if (socketId == data[i].id) {
+           if (myPlayer == undefined) { // this is the first time myPlayer is created
+              myName = prompt ( "Enter your name: ", myName ); 
+              socket.emit ( 'name',{name: myName} );              
+           }   
+           myPlayer = players[i];
+	       }
+
+	       if (data[i].firing){
+	          players[i].bullet.fire(players[i].angle -90);
+    	   }
+	     }	 
+   });   
+   
+   function Bullet (owner) { // owner is the object that fired
+     bullet = new Sprite (game, 'bullet.png', 25, 5);
+     bullet.owner = owner;
+     bullet.hide();
+     bullet.setBoundAction(DIE);
+     bullet.fire = function (angle) {
+        this.setPosition (this.owner.x, this.owner.y );
+        this.setImgAngle ( angle );	   	   
+        this.setMoveAngle ( angle);
+        this.setSpeed (20);
+        this.show();
+     }
+     return bullet;     
+   } 
+   
+   function createWall (x,y,width,height,filename) { 
+      len = walls.length
+      walls[len] = new Sprite (game, filename, width,height);
+	     walls[len].setPosition (x, y);
+      walls[len].setDX(0);  
+	     walls[len].id = 0;
+      return walls[len];
+   }
+   
+   function createFloor (x,y,width,height,filename) { 
+      len = floors.length
+      floors[len] = new Sprite (game, filename, width,height);
+	     floors[len].setPosition (x, y);
+      floors[len].setDX(0);  
+   }
+ 
+   function showBoard (level) {
+      if (level == 0) { 
+         showBoard0();
+      } else if (level == 1) { 
+         showBoard1();
+      }
+   }
+   function init() {
+      game = new Scene();	 
+      showBoard (myLevel);
+      
+      sound = new Sound ('college.mp3');
+      college = new Sprite (game,'hawkeyes.jpg',0,0);
+      college.setPosition (650,500);
+      college.setDX(0);
+      accel = new Accel();           
+      game.start();
+   }
+   
+   function checkCollisions(obj, objectList,dx, dy, ignore) {
+     var collision = undefined;
+
+     for (var i=0; i<objectList.length; i++) {	
+       if (objectList[i] !== ignore) 	 
+         if (obj.willCollide(objectList[i], dx, dy)) {
+           collision = objectList[i];
+           break;
+         }
+     }       	   	 
+     return collision;
+   }
+      
+   function update() {
+      var diff;
+      game.clear();
+	  
+	     for (i=0; i<floors.length; i++) {
+        floors[i].update();
+	     }  
+
+      // Check if my bullet has hit anyone.      
+      obj = checkCollisions(myPlayer.bullet, players, 0, 0, myPlayer) 
+      if (obj != undefined) {
+         // alert ( obj.id );
+         socket.emit ( 'kill',{id: obj.id} );
+         socket.emit ( 'killbullet', {});
+      }      
+
+   	  for (var i=0; i<players.length; i++) {
+         if (players[i].died) {
+            players[i].visible = false;
+         } else { 
+            players[i].setPosition (players[i].x,players[i].y);
+            players[i].setDX(0);
+            players[i].setDY(0);
+            players[i].update();
+            players[i].bullet.update(); // Change [x,y] position of bullet                  
+            players[i].setImgAngle ( players[i].angle );
+         }   
+      }    
+	  
+   	  if (myPlayer !== undefined) { 
+        // placeLabel ( "<Font Color='White'>" + myName + "</Font>", myPlayer.x - (3*myName.length), myPlayer.y - 15);      
+	       var angleDeg = Math.atan2(myPlayer.y - MOUSEY, 
+		                                myPlayer.x - MOUSEX) * 180 / Math.PI;  
+        myPlayer.setImgAngle ( angleDeg );
+		
+        diff = Math.abs (lastAngle - angleDeg ); 
+		      if (diff > 5) { 
+    	      lastAngle = angleDeg;
+    	      socket.emit ( 'angle', {angle: angleDeg});  
+		      }
+	       if (gotMouseDown) {
+	          socket.emit ( 'fire', {angle: angleDeg}); 
+		         gotMouseDown = false;
+        }	
+        if (keysDown[K_CR]) {
+           keysDown[K_CR] = false;
+           msg = prompt ( "Enter your message: " );           
+           socket.emit ( 'speak',{message: msg} );         
+           setTimeout (function(){socket.emit ('quiet', {});}, 10000);           
+        }
+		      if (keysDown[K_A] || keysDown[K_D] || keysDown [K_W] || keysDown[K_S]) {
+		        	dx = 0;
+		        	if (keysDown[K_D]) {
+			          dx = SPEED;
+			        } else if (keysDown [K_A]) { 
+			          dx = 0-SPEED;
+			        }
+			
+			        dy = 0;
+			        if (keysDown[K_W]) { 
+			          dy = 0-SPEED;
+			        } else if (keysDown[K_S]) {
+			          dy = SPEED;
+		        	}
+			
+		        	if ( ((myPlayer.x + dx) > 50) && ((myPlayer.x + dx) < MAPRIGHT) && ((myPlayer.y + dy) < MAPBOTTOM) && ((myPlayer.y +dy) > 50) ) {
+             obj = checkCollisions(myPlayer, walls, dx, dy);
+             if (obj) { // Walked into something
+               if (obj == stairs) {
+                   myLevel = 1;                  
+                   for (var i=0; i<walls.length; i++) {
+                      walls[i].visible = false; 
+                   }                  
+                   showBoard(myLevel); 
+               } else if (obj == chest) { 
+                  alert ( 'You have found the key to the next level' );
+               }
+             } else { // no collision
+			             //alert ( 'No collision detected' );
+			             if (keysDown[K_A])
+			 	              socket.emit ('keyPress', {inputId: 'left'});
+			             if (keysDown[K_D]) 
+			             	  socket.emit ('keyPress', {inputId: 'right'});
+			             if (keysDown[K_W])
+			             	  socket.emit ('keyPress', {inputId: 'up'});
+	 		            if (keysDown[K_S])
+ 				              socket.emit ('keyPress', {inputId: 'down'});
+ 			            keysDown[K_A] = false;
+			             keysDown[K_D] = false;
+			             keysDown[K_W] = false;
+			             keysDown[K_S] = false;
+			          }
+			       }		
+		      }  
+		      if (checkCollisions(myPlayer.bullet, walls, myPlayer.bullet.dx, myPlayer.bullet.dy) ) {
+           socket.emit ( 'killbullet', {}); 
+	  	    }
+      }
+	  
+      for (i=0; i<walls.length; i++) {
+         walls[i].update();
+      } 	  
+      college.update();  
+      
+   }
+   
+</script>
+</head>
+<body onload = "init()">
+<div id="div1"><Label id="label1" style="position:absolute" ><Font Color="White"></Font></Label></div>
+</body>
+</html>
